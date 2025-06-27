@@ -1,10 +1,15 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import dotenv from "dotenv"
+import "dotenv/config";
+// import dotenv from "dotenv";
+// dotenv.config();
 import { connectDB } from "./configs/connectDB.js";
-import { errorResponseHandler, invalidPathHandler } from "./middlewares/errorHandlers.js";
-dotenv.config();
+import {
+  errorResponseHandler,
+  invalidPathHandler,
+} from "./middlewares/errorHandlers.js";
+import AuthRoute from "./routes/authRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -22,8 +27,10 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 connectDB();
 
-app.use(invalidPathHandler)
-app.use(errorResponseHandler)
+app.use("/api/auth/v1", AuthRoute);
+
+app.use(invalidPathHandler);
+app.use(errorResponseHandler);
 
 app.listen(PORT, () => {
   console.log(`Server started at http://localhost:${PORT}`);

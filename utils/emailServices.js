@@ -20,17 +20,21 @@ export const sendVerificationEmail = async (
     const transporter = createTransporter();
     const mailOptions = {
       from: {
-        name: "Merofly",
+        name: "MeroFly",
         address: process.env.EMAIL_USER,
       },
       to: email,
       subject: "Email Verification Code",
       html: getVerificationEmailTemplate(firstName, verificationCode),
     };
+    
     const result = await transporter.sendMail(mailOptions);
     console.log("Verification email sent!", result.messageId);
+
+    return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error("Error sending verification email!");
+    console.error("Error sending verification email!", error);
     return { success: false, error: error.message };
   }
 };
+

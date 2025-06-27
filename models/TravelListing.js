@@ -18,7 +18,7 @@ const travelListingSchema = new mongoose.Schema(
     pickupLocation: { type: String, required: true },
     airline: { type: String },
     flightNumber: { type: String },
-    restrictions: [String], // e.g., "No liquids", "Electronics only"
+    restrictions: [String],
     isActive: { type: Boolean, default: true },
     status: {
       type: String,

@@ -1,115 +1,121 @@
-import UserModel from "../models/UserModel.js"
-import { sendVerificationEmail } from "../utils/emailServices.js"
-import { generateAccessToken, generateRefreshToken } from "../utils/refreshTokenUtils.js"
-import TokenModel from "../models/TokenModel.js"
-import JWT from "jsonwebtoken"
-
+import { sendVerificationEmail } from "../utils/emailServices.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/refreshTokenUtils.js";
+import TokenModel from "../models/TokenModel.js";
+import JWT from "jsonwebtoken";
+import UserModel from "../models/UserModel.js";
 // Step 1: Basic Registration (only basic info)
 export const registerUser = async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password } = req.body
+    const { firstName, lastName, email, password } = req.body;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
-      })
+      });
     }
 
     if (password.length < 8) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 8 characters long!",
-      })
+      });
     }
 
-    const existingUser = await UserModel.findOne({ email })
+    const existingUser = await UserModel.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         success: false,
         message: "User already exists with this email address!",
-      })
+      });
     }
 
-    // Create user with only basic info
     const user = new UserModel({
       firstName,
       lastName,
       email,
       password,
-    })
+    });
 
-    const verificationCode = user.generateEmailVerificationCode()
-    await user.save()
+    const verificationCode = user.generateEmailVerificationCode();
+    await user.save();
 
-    const emailResult = await sendVerificationEmail(email, firstName, verificationCode)
+    const emailResult = await sendVerificationEmail(
+      email,
+      verificationCode,
+      firstName
+    );
 
-    if (!emailResult.success) {
-      await UserModel.findByIdAndDelete(user._id)
+    if (!emailResult || !emailResult.success) {
+      await UserModel.findByIdAndDelete(user._id);
       return res.status(400).json({
         success: false,
         message: "Failed to send verification email. Please try again.",
-      })
+      });
     }
 
     return res.status(201).json({
       success: true,
-      message: "Registration successful! Please check your email for verification code.",
+      message:
+        "Registration successful! Please check your email for verification code.",
       userId: user._id,
       email: user.email,
       nextStep: "email_verification",
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 // Step 2: Email Verification
 export const verifyEmail = async (req, res, next) => {
   try {
-    const { email, verificationCode } = req.body
+    const { email, verificationCode } = req.body;
     if (!email || !verificationCode) {
       return res.status(400).json({
         success: false,
         message: "Email and verification code are required!",
-      })
+      });
     }
 
-    const user = await UserModel.findOne({ email })
+    const user = await UserModel.findOne({ email });
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
     if (user.isEmailVerified) {
       return res.status(400).json({
         success: false,
         message: "Email is already verified!",
-      })
+      });
     }
 
     if (!user.isVerificationCodeValid(verificationCode)) {
       return res.status(400).json({
         success: false,
         message: "Invalid or expired verification code.",
-      })
+      });
     }
 
-    user.isEmailVerified = true
-    user.verificationCode = undefined
-    user.verificationCodeExpiry = undefined
-    await user.save()
+    user.isEmailVerified = true;
+    user.verificationCode = undefined;
+    user.verificationCodeExpiry = undefined;
+    await user.save();
 
-    const token = user.generateJWT()
+    const token = user.generateJWT();
 
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    })
+    });
 
     return res.status(200).json({
       success: true,
@@ -122,77 +128,81 @@ export const verifyEmail = async (req, res, next) => {
         email: user.email,
         currentStep: user.getCurrentStep(),
       },
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 // Step 3: Complete Profile (additional details + document)
 export const completeProfile = async (req, res, next) => {
   try {
-    const { phoneNumber, country, role, travelerInfo, terms, conditions } = req.body
-    const file = req.file // document file
+    const { phoneNumber, country, role, travelerInfo, terms, conditions } =
+      req.body;
+    const file = req.file; // document file
 
     if (!phoneNumber || !country || !role || !terms || !conditions) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
-      })
+      });
     }
 
     if (!["traveler", "sender"].includes(role)) {
       return res.status(400).json({
         success: false,
         message: "Invalid role specified!",
-      })
+      });
     }
 
     if (!file) {
       return res.status(400).json({
         success: false,
         message: "Document upload is required!",
-      })
+      });
     }
 
-    const user = await UserModel.findById(req.user.id)
+    const user = await UserModel.findById(req.user.id);
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
     if (!user.isEmailVerified) {
       return res.status(400).json({
         success: false,
         message: "Please verify your email first!",
-      })
+      });
     }
 
     // Validate document type based on role
-    const documentType = req.body.documentType
+    const documentType = req.body.documentType;
     if (role === "traveler" && documentType !== "passport") {
       return res.status(400).json({
         success: false,
         message: "Travelers must upload passport!",
-      })
+      });
     }
 
-    if (role === "sender" && !["national_id", "government_id"].includes(documentType)) {
+    if (
+      role === "sender" &&
+      !["national_id", "government_id"].includes(documentType)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Senders must upload national ID or government ID!",
-      })
+      });
     }
 
     // Update user profile
-    user.phoneNumber = phoneNumber
-    user.country = country
-    user.role = role
-    user.terms = terms
-    user.conditions = conditions
-    user.isProfileComplete = true
+    user.phoneNumber = phoneNumber;
+    user.country = country;
+    user.role = role;
+    user.terms = terms;
+    user.conditions = conditions;
+    user.isProfileComplete = true;
 
     // Add traveler info if role is traveler
     if (role === "traveler" && travelerInfo) {
@@ -204,7 +214,7 @@ export const completeProfile = async (req, res, next) => {
         pickUpLocation: travelerInfo.pickUpLocation,
         airline: travelerInfo.airline,
         storageAvailable: travelerInfo.storageAvailable,
-      }
+      };
     }
 
     // Add document
@@ -213,13 +223,14 @@ export const completeProfile = async (req, res, next) => {
       url: file.path || file.filename, // You'll replace this with cloud storage URL
       status: "pending",
       uploadedAt: new Date(),
-    }
+    };
 
-    await user.save()
+    await user.save();
 
     return res.status(200).json({
       success: true,
-      message: "Profile completed successfully! Your document is being reviewed.",
+      message:
+        "Profile completed successfully! Your document is being reviewed.",
       nextStep: "document_review",
       redirectTo: "/verification-status",
       user: {
@@ -230,21 +241,21 @@ export const completeProfile = async (req, res, next) => {
         currentStep: user.getCurrentStep(),
         isProfileComplete: user.isProfileComplete,
       },
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 // Get user verification status
 export const getVerificationStatus = async (req, res, next) => {
   try {
-    const user = await UserModel.findById(req.user.id).select("-password")
+    const user = await UserModel.findById(req.user.id).select("-password");
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
     return res.status(200).json({
@@ -264,132 +275,137 @@ export const getVerificationStatus = async (req, res, next) => {
         document: user.document,
         travelerInfo: user.travelerInfo,
       },
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const resendVerificationEmail = async (req, res, next) => {
   try {
-    const { email } = req.body
+    const { email } = req.body;
 
     if (!email) {
       return res.status(400).json({
         success: false,
         message: "Email is required!",
-      })
+      });
     }
 
-    const user = await UserModel.findOne({ email })
+    const user = await UserModel.findOne({ email });
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
     if (user.isEmailVerified) {
       return res.status(400).json({
         success: false,
         message: "User is already verified!",
-      })
+      });
     }
 
-    const verificationCode = user.generateVerificationCode()
-    await user.save()
+    const verificationCode = user.generateVerificationCode();
+    await user.save();
 
-    const emailResult = await sendVerificationEmail(email, user.firstName, verificationCode)
+    const emailResult = await sendVerificationEmail(
+      email,
+      user.firstName,
+      verificationCode
+    );
 
     if (!emailResult.success) {
       return res.status(500).json({
         success: false,
         message: "Failed to send verification email. Please try again.",
-      })
+      });
     }
 
     return res.status(200).json({
       success: true,
       message: "Verification code sent successfully!",
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const loginUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body
+    const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
-      })
+      });
     }
 
-    const user = await UserModel.findOne({ email })
+    const user = await UserModel.findOne({ email });
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
     if (user.isLocked()) {
       return res.status(423).json({
         success: false,
-        message: "Account is temporarily locked due to too many failed login attempts.",
-      })
+        message:
+          "Account is temporarily locked due to too many failed login attempts.",
+      });
     }
 
-    const isPasswordValid = await user.comparePassword(password)
+    const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
-      user.loginAttempt += 1
+      user.loginAttempt += 1;
       if (user.loginAttempt >= 5) {
-        user.lockUntil = new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
+        user.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       }
-      await user.save()
+      await user.save();
 
       return res.status(400).json({
         success: false,
         message: "Invalid email or password!",
-      })
+      });
     }
 
     // Reset login attempts
-    user.loginAttempt = 0
-    user.lockUntil = undefined
-    await user.save()
+    user.loginAttempt = 0;
+    user.lockUntil = undefined;
+    await user.save();
 
-    const accessToken = generateAccessToken(user)
-    const refreshToken = generateRefreshToken(user)
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
 
-    await TokenModel.create({ userId: user._id, token: refreshToken })
+    await TokenModel.create({ userId: user._id, token: refreshToken });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    })
+    });
 
     res.cookie("token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    })
+    });
 
     // Determine where to redirect based on verification status
-    let redirectTo = "/dashboard"
-    const currentStep = user.getCurrentStep()
+    let redirectTo = "/dashboard";
+    const currentStep = user.getCurrentStep();
 
     if (currentStep === "email_verification") {
-      redirectTo = "/verify-email"
+      redirectTo = "/verify-email";
     } else if (currentStep === "profile_completion") {
-      redirectTo = "/complete-profile"
+      redirectTo = "/complete-profile";
     } else if (currentStep === "document_verification") {
-      redirectTo = "/verification-status"
+      redirectTo = "/verification-status";
     }
 
     return res.status(200).json({
@@ -408,70 +424,74 @@ export const loginUser = async (req, res, next) => {
         isDocumentVerified: user.isDocumentVerified,
         isFullyVerified: user.isFullyVerified,
       },
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const refreshAccessTokenController = async (req, res, next) => {
   try {
-    const token = req.cookies.refreshToken
+    const token = req.cookies.refreshToken;
 
     if (!token) {
       return res.status(401).json({
         success: false,
         message: "No refresh token.",
-      })
+      });
     }
 
-    const existingToken = await TokenModel.findOne({ token })
+    const existingToken = await TokenModel.findOne({ token });
     if (!existingToken) {
       return res.status(403).json({
         success: false,
         message: "Refresh token not found!",
-      })
+      });
     }
 
-    const payload = JWT.verify(token, process.env.REFRESH_TOKEN_SECRET)
+    const payload = JWT.verify(token, process.env.REFRESH_TOKEN_SECRET);
 
-    const user = await UserModel.findById(payload.id).select("-password")
+    const user = await UserModel.findById(payload.id).select("-password");
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      })
+      });
     }
 
-    const newAccessToken = JWT.sign({ id: user._id, role: user.role }, process.env.ACCESS_TOKEN_SECRET, {
-      expiresIn: "15m",
-    })
+    const newAccessToken = JWT.sign(
+      { id: user._id, role: user.role },
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: "15m",
+      }
+    );
 
     return res.status(200).json({
       success: true,
       message: "Access token refreshed.",
       token: newAccessToken,
       user,
-    })
+    });
   } catch (error) {
     return res.status(401).json({
       success: false,
       message: "Invalid refresh token!",
-    })
+    });
   }
-}
+};
 
 export const logoutUser = async (req, res, next) => {
   try {
-    const refreshToken = req.cookies.refreshToken
-    await TokenModel.findOneAndDelete({ token: refreshToken })
+    const refreshToken = req.cookies.refreshToken;
+    await TokenModel.findOneAndDelete({ token: refreshToken });
 
-    res.clearCookie("refreshToken", { httpOnly: true })
-    res.clearCookie("token", { httpOnly: true })
+    res.clearCookie("refreshToken", { httpOnly: true });
+    res.clearCookie("token", { httpOnly: true });
 
-    console.log("Logged out successfully!")
-    return res.sendStatus(204)
+    console.log("Logged out successfully!");
+    return res.sendStatus(204);
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
