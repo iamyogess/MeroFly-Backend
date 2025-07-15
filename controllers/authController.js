@@ -6,12 +6,20 @@ import {
 import TokenModel from "../models/TokenModel.js";
 import JWT from "jsonwebtoken";
 import UserModel from "../models/UserModel.js";
+
 // Step 1: Basic Registration (only basic info)
 export const registerUser = async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
-
-    if (!firstName || !lastName || !email || !password) {
+    const { fullName, email, password, termsAndConditions, privacyPolicy } =
+      req.body;
+    console.log(fullName, email, password, termsAndConditions, privacyPolicy)
+    if (
+      !fullName ||
+      !email ||
+      !password ||
+      !termsAndConditions ||
+      !privacyPolicy
+    ) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
@@ -34,10 +42,11 @@ export const registerUser = async (req, res, next) => {
     }
 
     const user = new UserModel({
-      firstName,
-      lastName,
+      fullName,
       email,
       password,
+      termsAndConditions,
+      privacyPolicy,
     });
 
     const verificationCode = user.generateEmailVerificationCode();
@@ -46,7 +55,7 @@ export const registerUser = async (req, res, next) => {
     const emailResult = await sendVerificationEmail(
       email,
       verificationCode,
-      firstName
+      fullName
     );
 
     if (!emailResult || !emailResult.success) {
@@ -124,7 +133,7 @@ export const verifyEmail = async (req, res, next) => {
       redirectTo: "/complete-profile",
       user: {
         _id: user._id,
-        name: user.firstName + " " + user.lastName,
+        name: user.fullName,
         email: user.email,
         currentStep: user.getCurrentStep(),
       },
@@ -235,7 +244,7 @@ export const completeProfile = async (req, res, next) => {
       redirectTo: "/verification-status",
       user: {
         _id: user._id,
-        name: user.firstName + " " + user.lastName,
+        name: user.fullName,
         email: user.email,
         role: user.role,
         currentStep: user.getCurrentStep(),
@@ -262,7 +271,7 @@ export const getVerificationStatus = async (req, res, next) => {
       success: true,
       user: {
         _id: user._id,
-        name: user.firstName + " " + user.lastName,
+        name: user.fullName,
         email: user.email,
         role: user.role,
         phoneNumber: user.phoneNumber,
@@ -312,7 +321,7 @@ export const resendVerificationEmail = async (req, res, next) => {
 
     const emailResult = await sendVerificationEmail(
       email,
-      user.firstName,
+      user.fullName,
       verificationCode
     );
 
@@ -416,7 +425,7 @@ export const loginUser = async (req, res, next) => {
       redirectTo,
       user: {
         _id: user._id,
-        name: user.firstName + " " + user.lastName,
+        name: user.fullName,
         email: user.email,
         role: user.role,
         isEmailVerified: user.isEmailVerified,

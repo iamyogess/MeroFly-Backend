@@ -1,14 +1,15 @@
-import mongoose from "mongoose"
-import bcrypt from "bcrypt"
-import JWT from "jsonwebtoken"
+import mongoose from "mongoose";
+import bcrypt from "bcrypt";
+import JWT from "jsonwebtoken";
 
 const userSchema = new mongoose.Schema(
   {
     // Basic Info (collected during registration)
-    firstName: { type: String, required: true, trim: true },
-    lastName: { type: String, required: true, trim: true },
+    fullName: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true, minlength: 8 },
+    termsAndConditions: { type: Boolean, required: true, default: false },
+    privacyPolicy: { type: Boolean, required: true, default: false },
 
     // Additional Info (collected after email verification)
     phoneNumber: { type: String },
@@ -69,60 +70,65 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       transform: (doc, ret) => {
-        delete ret.password
-        delete ret.verificationCode
-        return ret
+        delete ret.password;
+        delete ret.verificationCode;
+        return ret;
       },
     },
-  },
-)
+  }
+);
 
 // Get current step for user
 userSchema.methods.getCurrentStep = function () {
-  if (!this.isEmailVerified) return "email_verification"
-  if (!this.isProfileComplete) return "profile_completion"
-  if (!this.isDocumentVerified) return "document_verification"
-  return "complete"
-}
+  if (!this.isEmailVerified) return "email_verification";
+  if (!this.isProfileComplete) return "profile_completion";
+  if (!this.isDocumentVerified) return "document_verification";
+  return "complete";
+};
 
 // Account lockout check
 userSchema.methods.isLocked = function () {
-  return !!(this.lockUntil && this.lockUntil > Date.now())
-}
+  return !!(this.lockUntil && this.lockUntil > Date.now());
+};
 
 // Update verification status
 userSchema.methods.updateVerificationStatus = function () {
-  this.isFullyVerified = this.isEmailVerified && this.isProfileComplete && this.isDocumentVerified
-  return this.save()
-}
+  this.isFullyVerified =
+    this.isEmailVerified && this.isProfileComplete && this.isDocumentVerified;
+  return this.save();
+};
 
 // Email verification methods
 userSchema.methods.generateEmailVerificationCode = function () {
-  const code = Math.floor(100000 + Math.random() * 900000).toString()
-  this.verificationCode = code
-  this.verificationCodeExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-  return code
-}
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  this.verificationCode = code;
+  this.verificationCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  return code;
+};
 
 userSchema.methods.generateVerificationCode = function () {
-  return this.generateEmailVerificationCode()
-}
+  return this.generateEmailVerificationCode();
+};
 
 userSchema.methods.isVerificationCodeValid = function (code) {
-  return this.verificationCode === code && this.verificationCodeExpiry && this.verificationCodeExpiry > new Date()
-}
+  return (
+    this.verificationCode === code &&
+    this.verificationCodeExpiry &&
+    this.verificationCodeExpiry > new Date()
+  );
+};
 
 // Password methods
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
-    this.password = await bcrypt.hash(this.password, 12)
+    this.password = await bcrypt.hash(this.password, 12);
   }
-  next()
-})
+  next();
+});
 
 userSchema.methods.comparePassword = function (password) {
-  return bcrypt.compare(password, this.password)
-}
+  return bcrypt.compare(password, this.password);
+};
 
 userSchema.methods.generateJWT = function () {
   return JWT.sign(
@@ -134,9 +140,9 @@ userSchema.methods.generateJWT = function () {
       isFullyVerified: this.isFullyVerified,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" },
-  )
-}
+    { expiresIn: "7d" }
+  );
+};
 
-const UserModel = mongoose.model("User", userSchema)
-export default UserModel
+const UserModel = mongoose.model("User", userSchema);
+export default UserModel;

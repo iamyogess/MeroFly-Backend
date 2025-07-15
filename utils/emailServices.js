@@ -14,7 +14,7 @@ const createTransporter = () => {
 export const sendVerificationEmail = async (
   email,
   verificationCode,
-  firstName
+  fullName
 ) => {
   try {
     const transporter = createTransporter();
@@ -25,11 +25,10 @@ export const sendVerificationEmail = async (
       },
       to: email,
       subject: "Email Verification Code",
-      html: getVerificationEmailTemplate(firstName, verificationCode),
+      html: getVerificationEmailTemplate(fullName, verificationCode),
     };
-    
+
     const result = await transporter.sendMail(mailOptions);
-    console.log("Verification email sent!", result.messageId);
 
     return { success: true, messageId: result.messageId };
   } catch (error) {
@@ -37,4 +36,3 @@ export const sendVerificationEmail = async (
     return { success: false, error: error.message };
   }
 };
-

@@ -1,5 +1,5 @@
 export const getVerificationEmailTemplate = (
-  firstName,
+  fullName,
   verificationCode,
   companyName = "Merofly"
 ) => {
@@ -79,7 +79,7 @@ export const getVerificationEmailTemplate = (
                 <h1 style="color: #333; margin: 0;">Email Verification</h1>
             </div>
             
-            <p>Hello <strong>${firstName}</strong>,</p>
+            <p>Hello <strong>${fullName}</strong>,</p>
             
             <p>Thank you for registering with ${companyName}! To complete your registration and secure your account, please verify your email address using the verification code below:</p>
             

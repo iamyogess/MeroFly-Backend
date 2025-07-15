@@ -126,7 +126,6 @@ export const getAllUsers = async (req, res, next) => {
   }
 };
 
-
 // delete user (admin)
 export const deleteUser = async (req, res, next) => {
   try {
