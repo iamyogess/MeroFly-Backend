@@ -43,12 +43,11 @@ router.post(
   "/complete-profile",
   authenticateToken,
   requireEmailVerification,
-  upload.single("document"),
   completeProfile,
 ) // Step 3: Profile + document
 
 // Other auth routes
-router.post("/resend-verification", resendVerificationEmail)
+router.post("/resend-verification-email", resendVerificationEmail)
 router.post("/login", loginUser)
 router.post("/refresh-token", refreshAccessTokenController)
 router.post("/logout", logoutUser)

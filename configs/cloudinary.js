@@ -8,25 +8,40 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
+const imageFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image files are allowed!"));
+  }
+};
+
+const verificationDocumentStorage = new CloudinaryStorage({
+  cloudinary,
   params: {
-    folder: "mero-fly",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: [{ quality: "auto" }],
+    folder: "merofly/users/verification-documents",
+    allowed_formats: ["jpg", "jpeg", "png"],
   },
 });
 
-export const upload = multer({
-  storage: storage,
-  limits: {
-    fieldSize: 5 * 1024 * 1024,
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only image files are allowed!"));
-    }
+const profileStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "merofly/users/profile",
+    allowed_formats: ["jpg", "jpeg", "png"],
+    transformation: [{ width: 1000, height: 1000, crop: "limit" }],
   },
 });
+
+export const uploads = {
+  verificationDocument: multer({
+    storage: verificationDocumentStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFilter,
+  }),
+  userProfile: multer({
+    storage: profileStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFilter,
+  }),
+};

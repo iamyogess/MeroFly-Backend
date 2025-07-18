@@ -10,16 +10,8 @@ import UserModel from "../models/UserModel.js";
 // Step 1: Basic Registration (only basic info)
 export const registerUser = async (req, res, next) => {
   try {
-    const { fullName, email, password, termsAndConditions, privacyPolicy } =
-      req.body;
-    console.log(fullName, email, password, termsAndConditions, privacyPolicy)
-    if (
-      !fullName ||
-      !email ||
-      !password ||
-      !termsAndConditions ||
-      !privacyPolicy
-    ) {
+    const { fullName, email, password } = req.body;
+    if (!fullName || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
@@ -45,8 +37,6 @@ export const registerUser = async (req, res, next) => {
       fullName,
       email,
       password,
-      termsAndConditions,
-      privacyPolicy,
     });
 
     const verificationCode = user.generateEmailVerificationCode();
@@ -82,75 +72,77 @@ export const registerUser = async (req, res, next) => {
 // Step 2: Email Verification
 export const verifyEmail = async (req, res, next) => {
   try {
-    const { email, verificationCode } = req.body;
+    const { email, verificationCode } = req.body
+
     if (!email || !verificationCode) {
       return res.status(400).json({
         success: false,
         message: "Email and verification code are required!",
-      });
+      })
     }
 
-    const user = await UserModel.findOne({ email });
+    const user = await UserModel.findOne({ email })
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      });
+      })
     }
 
     if (user.isEmailVerified) {
       return res.status(400).json({
         success: false,
         message: "Email is already verified!",
-      });
+      })
     }
 
     if (!user.isVerificationCodeValid(verificationCode)) {
       return res.status(400).json({
         success: false,
         message: "Invalid or expired verification code.",
-      });
+      })
     }
 
-    user.isEmailVerified = true;
-    user.verificationCode = undefined;
-    user.verificationCodeExpiry = undefined;
-    await user.save();
+    user.isEmailVerified = true
+    user.verificationCode = undefined
+    user.verificationCodeExpiry = undefined
+    await user.save()
 
-    const token = user.generateJWT();
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    // ❌ REMOVED: Cookie setting - no authentication here
+    // ❌ REMOVED: const token = user.generateJWT();
+    // ❌ REMOVED: res.cookie("token", token, { ... });
 
     return res.status(200).json({
       success: true,
-      message: "Email verification successful!",
-      nextStep: "profile_completion",
-      redirectTo: "/complete-profile",
+      message: "Email verified successfully! Please login to continue.",
+      nextStep: "login",
+      redirectTo: "/auth/login", // Redirect to login instead of complete-profile
       user: {
         _id: user._id,
         name: user.fullName,
         email: user.email,
         currentStep: user.getCurrentStep(),
       },
-    });
+    })
   } catch (error) {
-    next(error);
+    next(error)
   }
-};
-
+}
 // Step 3: Complete Profile (additional details + document)
 export const completeProfile = async (req, res, next) => {
   try {
-    const { phoneNumber, country, role, travelerInfo, terms, conditions } =
-      req.body;
-    const file = req.file; // document file
+    const {
+      phoneNumber,
+      country,
+      role,
+      travelerInfo,
+      termsAndConditions,
+      privacyPolicy,
+      documentType,
+      documentUrl,
+    } = req.body;
 
-    if (!phoneNumber || !country || !role || !terms || !conditions) {
+    if (!phoneNumber || !country || !role || !termsAndConditions || !privacyPolicy || !documentUrl || !documentType) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
@@ -161,13 +153,6 @@ export const completeProfile = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Invalid role specified!",
-      });
-    }
-
-    if (!file) {
-      return res.status(400).json({
-        success: false,
-        message: "Document upload is required!",
       });
     }
 
@@ -187,7 +172,6 @@ export const completeProfile = async (req, res, next) => {
     }
 
     // Validate document type based on role
-    const documentType = req.body.documentType;
     if (role === "traveler" && documentType !== "passport") {
       return res.status(400).json({
         success: false,
@@ -195,10 +179,7 @@ export const completeProfile = async (req, res, next) => {
       });
     }
 
-    if (
-      role === "sender" &&
-      !["national_id", "government_id"].includes(documentType)
-    ) {
+    if (role === "sender" && !["national_id", "government_id"].includes(documentType)) {
       return res.status(400).json({
         success: false,
         message: "Senders must upload national ID or government ID!",
@@ -209,8 +190,8 @@ export const completeProfile = async (req, res, next) => {
     user.phoneNumber = phoneNumber;
     user.country = country;
     user.role = role;
-    user.terms = terms;
-    user.conditions = conditions;
+    user.termsAndConditions = termsAndConditions;
+    user.privacyPolicy = privacyPolicy;
     user.isProfileComplete = true;
 
     // Add traveler info if role is traveler
@@ -229,7 +210,7 @@ export const completeProfile = async (req, res, next) => {
     // Add document
     user.document = {
       type: documentType,
-      url: file.path || file.filename, // You'll replace this with cloud storage URL
+      url: documentUrl,
       status: "pending",
       uploadedAt: new Date(),
     };
@@ -238,8 +219,7 @@ export const completeProfile = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message:
-        "Profile completed successfully! Your document is being reviewed.",
+      message: "Profile completed successfully! Your document is being reviewed.",
       nextStep: "document_review",
       redirectTo: "/verification-status",
       user: {
@@ -294,6 +274,8 @@ export const resendVerificationEmail = async (req, res, next) => {
   try {
     const { email } = req.body;
 
+    console.log("verification email", email);
+
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -343,78 +325,94 @@ export const resendVerificationEmail = async (req, res, next) => {
 
 export const loginUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body
+
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required!",
-      });
+      })
     }
 
-    const user = await UserModel.findOne({ email });
+    const user = await UserModel.findOne({ email })
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found!",
-      });
+      })
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify your email first!",
+        needsVerification: true, // Add this field for frontend
+        redirectTo: `/auth/verify-email?email=${encodeURIComponent(email)}`,
+      })
     }
 
     if (user.isLocked()) {
       return res.status(423).json({
         success: false,
-        message:
-          "Account is temporarily locked due to too many failed login attempts.",
-      });
+        message: "Account is temporarily locked due to too many failed login attempts.",
+      })
     }
 
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await user.comparePassword(password)
     if (!isPasswordValid) {
-      user.loginAttempt += 1;
+      user.loginAttempt += 1
       if (user.loginAttempt >= 5) {
-        user.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+        user.lockUntil = new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
       }
-      await user.save();
-
+      await user.save()
       return res.status(400).json({
         success: false,
         message: "Invalid email or password!",
-      });
+      })
     }
 
     // Reset login attempts
-    user.loginAttempt = 0;
-    user.lockUntil = undefined;
-    await user.save();
+    user.loginAttempt = 0
+    user.lockUntil = undefined
+    await user.save()
 
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const accessToken = generateAccessToken(user)
+    const refreshToken = generateRefreshToken(user)
+    await TokenModel.create({ userId: user._id, token: refreshToken })
 
-    await TokenModel.create({ userId: user._id, token: refreshToken });
-
+    // Set cookies
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
+    })
 
     res.cookie("token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    })
 
     // Determine where to redirect based on verification status
-    let redirectTo = "/dashboard";
-    const currentStep = user.getCurrentStep();
+    let redirectTo = "/dashboard"
+    const currentStep = user.getCurrentStep()
 
-    if (currentStep === "email_verification") {
-      redirectTo = "/verify-email";
-    } else if (currentStep === "profile_completion") {
-      redirectTo = "/complete-profile";
+    if (currentStep === "profile_completion") {
+      redirectTo = "/auth/complete-profile"
     } else if (currentStep === "document_verification") {
-      redirectTo = "/verification-status";
+      redirectTo = "/verification-status"
+    } else if (user.isFullyVerified) {
+      // Route based on role only if fully verified
+      if (user.role === "admin") {
+        redirectTo = "/admin"
+      } else if (user.role === "traveler") {
+        redirectTo = "/merofly"
+      } else if (user.role === "sender") {
+        redirectTo = "/traveler"
+      }
     }
 
     return res.status(200).json({
@@ -423,6 +421,7 @@ export const loginUser = async (req, res, next) => {
       accessToken,
       currentStep,
       redirectTo,
+      needsVerification: false, // Add this field
       user: {
         _id: user._id,
         name: user.fullName,
@@ -433,11 +432,11 @@ export const loginUser = async (req, res, next) => {
         isDocumentVerified: user.isDocumentVerified,
         isFullyVerified: user.isFullyVerified,
       },
-    });
+    })
   } catch (error) {
-    next(error);
+    next(error)
   }
-};
+}
 
 export const refreshAccessTokenController = async (req, res, next) => {
   try {

@@ -8,8 +8,6 @@ const userSchema = new mongoose.Schema(
     fullName: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true, minlength: 8 },
-    termsAndConditions: { type: Boolean, required: true, default: false },
-    privacyPolicy: { type: Boolean, required: true, default: false },
 
     // Additional Info (collected after email verification)
     phoneNumber: { type: String },
@@ -62,9 +60,9 @@ const userSchema = new mongoose.Schema(
     // Security
     loginAttempt: { type: Number, default: 0 },
     lockUntil: { type: Date },
-    terms: { type: Boolean, default: false },
-    conditions: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    termsAndConditions: { type: Boolean, required: true, default: false },
+    privacyPolicy: { type: Boolean, required: true, default: false },
   },
   {
     timestamps: true,
